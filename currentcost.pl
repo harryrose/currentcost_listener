@@ -53,6 +53,9 @@ my $value = "";
 
 
 sub addSensorValue{ my ($type, $sensor, $value) = @_;
+	MongoDB::force_double($value);
+	MongoDB::force_int($sensor);
+
 	$collection -> insert( { "type" => $type,
 							 "sensor" => $sensor,
 							 "value" => $value,
