@@ -3,14 +3,17 @@
 use strict;
 use Device::SerialPort qw( :PARAM :STAT 0.07);
 use XML::Parser;
-use DBI;
+use MongoDB;
+use MongoDB::MongoClient;
+use MongoDB::OID;
+use DateTime;
 
 # Beginning of configuration
 
 
 my $PORT = "/dev/CurrentCost";
-my $database = "sensordata";
-my $dbuser = "currentcost";
+my $databaseName = "sensordata";
+my $collectionName = "sensordata"; 
 my $dbhost = "localhost";
 my $logfile = "/var/log/currentcost";
 my $detatch = 0;
@@ -19,13 +22,8 @@ my $lockfile = "/.currentcost";
 # End of configuration
 
 open( LOGFILE, ">>$logfile");
-
 #detatch from the console
-
-
-
 my $depth = 0;
-
 
 my $parser = new XML::Parser (Style => 'Tree');
 
@@ -44,23 +42,29 @@ sub printAtDepth{ my ($depth, $string) = @_;
 	print $string;
 }
 
+my $dbClient = MongoDB::MongoClient->new( host => $dbhost );
+my $db = $dbClient -> get_database( $databaseName );
+my $collection = $db -> get_collection( $collectionName );
+
 my $watts = 0;
 my $channel = 0;
 my $sensor = 0;
 my $value = "";
 
+
+sub addSensorValue{ my ($type, $sensor, $value) = @_;
+	$collection -> insert( { "type" => $type,
+							 "sensor" => $sensor,
+							 "value" => $value,
+							 "time" => DateTime->now } );
+}
+
 sub addConsumption{ my ($sensor, $channel, $watts) = @_;
-	my $db = DBI->connect("DBI:mysql:$database:$dbhost",$dbuser);
-	my $query = $db->prepare("INSERT INTO `electricity` (`sensorid`,`channelid`,`consumption`,`time`) VALUES ($sensor,$channel,$watts,NOW());") or &log("Could not prepare query. $db->errstr\n");
-	$query->execute or &log("Could not execute query. $query->errstr");
-	$db->disconnect;
+	&addSensorValue("electricity",10+$channel,$watts);
 }
 
 sub addTemperature{ my ($sensor, $degreesc) = @_;
-	my $db = DBI->connect("DBI:mysql:$database:$dbhost",$dbuser);
-	my $query = $db->prepare("INSERT INTO `temperature` (`sensorid`,`temperature`,`time`) VALUES ($sensor,$degreesc,NOW());") or &log("Could not prepare query. $db->errstr\n");
-	$query->execute or &log("Could not execute query. $query->errstr");
-	$db->disconnect;
+	&addSensorValue("temperature",$sensor,$degreesc);
 }
 
 sub processTree{ my ($tag, $content) = @_;
